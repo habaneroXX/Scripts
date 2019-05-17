@@ -1,0 +1,108 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >
+  Lab: Create an Ec2 Instance.
+
+Resources:
+
+  # Basic Ec2 server
+  Ec2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-030dbca661d402413
+      InstanceType: t2.micro
+      KeyName: MyLoginKeyPair
+      Tags: 
+        - 
+          Key: "Name"
+          Value: "LAB-NginxServer"
+      SecurityGroupIds:
+        - !Ref WebSecuritygroup
+        - !Ref SSHSecuritygroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          amazon-linux-extras install nginx1.12 -y
+          systemctl start nginx
+          systemctl enable nginx
+          sed -i -e "0,/nginx/s/nginx/PatmanInThaHouse/" /usr/share/nginx/html/index.html
+
+  # Create your own LaunchTemplate with nginx
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateData:
+        ImageId: ami-030dbca661d402413
+        InstanceType: t2.micro
+        KeyName: MyLoginKeyPair
+        SecurityGroupIds:
+          - !GetAtt WebSecuritygroup.GroupId  
+          - !GetAtt SSHSecuritygroup.GroupId
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            yum update -y
+            amazon-linux-extras install nginx1.12 -y
+            systemctl start nginx
+            systemctl enable nginx
+            sed -i -e "0,/nginx/s/nginx/PatmanInThaHouse/" /usr/share/nginx/html/index.html
+
+
+  # SecurityGroup    
+  WebSecuritygroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: MyWebSecGroup
+      GroupName: MyWebSecGroup
+      SecurityGroupIngress: 
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+
+  # SecurityGroup    
+  SSHSecuritygroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: MySSHSecGroup
+      GroupName: MySSHSecGroup
+      SecurityGroupIngress: 
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+        
+  LoadBalancer:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      Name: "LoadBalancer"
+      Scheme: "internet-facing"
+      SecurityGroups: 
+      - "sg-b42e9ec6"
+      Subnets: 
+      - "subnet-d957e683"
+      - "subnet-1e5a2d78"
+      - "subnet-b40244fc"
+      Tags: []
+      IpAddressType: "ipv4"
+      Type: "application"
+
+  TargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: "/"
+      HealthCheckProtocol: "HTTP"
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      Matcher: 
+        HttpCode: "200"
+      Name: "TargetGroup"
+      Port: 80
+      Protocol: "HTTP"
+      TargetType: "instance"
+      UnhealthyThresholdCount: 2
+      VpcId: "vpc-3cccf65a"
+  
